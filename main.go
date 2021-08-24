@@ -6,60 +6,13 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
-	"time"
 
-	"github.com/ovh/go-ovh/ovh"
+	"cloud-inventory/api"
+	"cloud-inventory/models/ovh"
+
+	govh "github.com/ovh/go-ovh/ovh"
+	"github.com/spf13/cobra"
 )
-
-type Me struct {
-	ID           string `json:"id"`
-	Address      string `json:"address"`
-	City         string `json:"city"`
-	Country      string `json:"country"`
-	CustomerCode string `json:"customerCode"`
-	Email        string `json:"email"`
-	FirstName    string `json:"firstName"`
-	Name         string `json:"name"`
-	Nichandle    string `json:"nichandle"`
-	Zip          string `json:"zip"`
-	Currency     struct {
-		Code string `json:"code"`
-	} `json:"currency"`
-}
-
-type Project struct {
-	ID          string `json:"project_id"`
-	Status      string `json:"status"`
-	Description string `json:"description"`
-}
-
-type vRack struct {
-	ID string `json:"id"`
-}
-
-type Instance struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	IPAddresses []struct {
-		IP        string `json:"ip"`
-		Type      string `json:"type"`
-		Version   int    `json:"version"`
-		NetworkID string `json:"networkId"`
-		GatewayIP string `json:"gatewayIp"`
-	} `json:"ipAddresses"`
-	FlavorID       string    `json:"flavorId"`
-	ImageID        string    `json:"imageId"`
-	SSHKeyID       string    `json:"sshKeyId"`
-	Created        time.Time `json:"created"`
-	Region         string    `json:"region"`
-	MonthlyBilling struct {
-		Since  time.Time `json:"since"`
-		Status string    `json:"status"`
-	} `json:"monthlyBilling"`
-	Status       string        `json:"status"`
-	PlanCode     string        `json:"planCode"`
-	OperationIds []interface{} `json:"operationIds"`
-}
 
 // PrettyPrint Prettify the display
 func PrettyPrint(v interface{}) (err error) {
@@ -71,15 +24,42 @@ func PrettyPrint(v interface{}) (err error) {
 }
 
 func main() {
-	client, _ := ovh.NewDefaultClient()
+
+	var cmdOVH = &cobra.Command{
+		Use:   "ovh",
+		Short: "OVH inventory",
+		Long:  `Listing OVH servers (cloud & bare metal)`,
+		// Args: cobra.MinimumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			// sandbox.Run()
+			ovhListing()
+		},
+	}
+
+	var rootCmd = &cobra.Command{
+		Use:   "cloud-inventory",
+		Short: "cloud-inventory go api",
+		Long:  "cloud-inventory go api",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println("Starting api...")
+			api.LaunchServer()
+		},
+	}
+
+	rootCmd.AddCommand(cmdOVH)
+	rootCmd.Execute()
+}
+
+func ovhListing() {
+	client, _ := govh.NewDefaultClient()
 
 	// Me
-	me := Me{}
+	me := ovh.Me{}
 	client.Get("/me", &me)
 	fmt.Printf("Welcome %s!\n", me.FirstName)
 
 	// Projects
-	projects := make([]Project, 0)
+	projects := make([]ovh.Project, 0)
 	ids := []string{}
 	err := client.Get("/cloud/project", &ids)
 	if err != nil {
@@ -87,22 +67,22 @@ func main() {
 	}
 
 	for _, id := range ids {
-		project := Project{}
+		project := ovh.Project{}
 		client.Get(fmt.Sprintf("/cloud/project/%s", id), &project)
 		projects = append(projects, project)
 	}
 
 	// vRacks
 	for _, project := range projects {
-		vrack := vRack{}
+		vrack := ovh.VRack{}
 		client.Get(fmt.Sprintf("/cloud/project/%s/vrack", project.ID), &vrack)
 		fmt.Printf("Project %s has vRack %s\n", project.Description, vrack.ID)
 	}
 
 	// Instances
-	listOfInstances := make([]Instance, 0)
+	listOfInstances := make([]ovh.Instance, 0)
 	for _, project := range projects {
-		instances := make([]Instance, 0)
+		instances := make([]ovh.Instance, 0)
 		// test := make(json.RawMessage, 0)
 		client.Get(fmt.Sprintf("/cloud/project/%s/instance", project.ID), &instances)
 		// client.Get(fmt.Sprintf("/cloud/project/%s/instance", project.ID), &test)
@@ -116,9 +96,26 @@ func main() {
 
 	// Pretty Print
 	w := tabwriter.NewWriter(os.Stdout, 20, 1, 3, ' ', 0)
-	fmt.Fprintln(w, "REGION\tNAME")
+	fmt.Fprintln(w, "CLOUD TYPE\tREGION\tNAME\tSTATE")
 	for _, instance := range listOfInstances {
-		w.Write([]byte(fmt.Sprintf("%s\t%s\n", instance.Region, instance.Name)))
+		w.Write([]byte(fmt.Sprintf("%s\t%s\t%s\t%s\n", "Public Cloud", instance.Region, instance.Name, instance.Status)))
+	}
+	// w.Flush()
+
+	// Bare Metal Cloud > Dedicated servers
+	dedicatedServices := []string{}
+	listOfDedicatedServers := make([]ovh.DedicatedServer, 0)
+	client.Get("/dedicated/server", &dedicatedServices)
+	for _, dedicatedService := range dedicatedServices {
+		dedicatedServer := ovh.DedicatedServer{}
+		client.Get(fmt.Sprintf("/dedicated/server/%s", dedicatedService), &dedicatedServer)
+		listOfDedicatedServers = append(listOfDedicatedServers, dedicatedServer)
+	}
+
+	// w = tabwriter.NewWriter(os.Stdout, 20, 1, 3, ' ', 0)
+	// fmt.Fprintln(w, "CLOUD TYPE\tREGION\tNAME")
+	for _, server := range listOfDedicatedServers {
+		w.Write([]byte(fmt.Sprintf("%s\t%s\t%s\t%s\n", "Bare Metal Cloud", strings.ToUpper(server.Datacenter), server.Reverse, strings.ToUpper(server.State))))
 	}
 	w.Flush()
 }
