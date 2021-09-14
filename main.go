@@ -96,9 +96,9 @@ func ovhListing() {
 
 	// Pretty Print
 	w := tabwriter.NewWriter(os.Stdout, 20, 1, 3, ' ', 0)
-	fmt.Fprintln(w, "CLOUD TYPE\tREGION\tNAME\tSTATE")
+	fmt.Fprintln(w, "CLOUD TYPE\tREGION\tNAME\tIP\tSTATE")
 	for _, instance := range listOfInstances {
-		w.Write([]byte(fmt.Sprintf("%s\t%s\t%s\t%s\n", "Public Cloud", instance.Region, instance.Name, instance.Status)))
+		w.Write([]byte(fmt.Sprintf("%s\t%s\t%s\t%s\t%s\n", "Public Cloud", instance.Region, instance.Name, instance.IPAddresses[0].IP, instance.Status)))
 	}
 	// w.Flush()
 
@@ -115,7 +115,7 @@ func ovhListing() {
 	// w = tabwriter.NewWriter(os.Stdout, 20, 1, 3, ' ', 0)
 	// fmt.Fprintln(w, "CLOUD TYPE\tREGION\tNAME")
 	for _, server := range listOfDedicatedServers {
-		w.Write([]byte(fmt.Sprintf("%s\t%s\t%s\t%s\n", "Bare Metal Cloud", strings.ToUpper(server.Datacenter), server.Reverse, strings.ToUpper(server.State))))
+		w.Write([]byte(fmt.Sprintf("%s\t%s\t%s\t%s\t%s\n", "Bare Metal Cloud", strings.ToUpper(server.Datacenter), server.Reverse, server.IP, strings.ToUpper(server.State))))
 	}
 	w.Flush()
 }
